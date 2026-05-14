@@ -1,0 +1,194 @@
+<script setup lang="ts">
+import { Head } from '@inertiajs/vue3';
+import { reactive, ref } from 'vue';
+import { router } from '@inertiajs/vue3';
+import { Check, Loader2, Wifi, X } from 'lucide-vue-next';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import Heading from '@/components/Heading.vue';
+import { edit as editAiProviders } from '@/routes/ai-providers';
+
+type Provider = {
+    provider: string;
+    display_name: string;
+    api_key: string;
+    is_enabled: boolean;
+    default_model: string;
+};
+
+type TestState = {
+    testing: boolean;
+    result: { success: boolean; message: string } | null;
+};
+
+defineOptions({
+    layout: {
+        breadcrumbs: [{ title: 'AI Providers', href: editAiProviders() }],
+    },
+});
+
+const props = defineProps<{
+    providers: Provider[];
+}>();
+
+const formData = ref<Provider[]>(
+    props.providers.map((p) => ({ ...p })),
+);
+const isSaving = ref(false);
+const testStates = reactive<Record<string, TestState>>({});
+
+function getXsrfToken(): string {
+    const token = document.cookie
+        .split('; ')
+        .find((item) => item.startsWith('XSRF-TOKEN='))
+        ?.split('=')[1];
+    return token ? decodeURIComponent(token) : '';
+}
+
+async function handleSave() {
+    isSaving.value = true;
+    try {
+        await fetch('/settings/ai-providers', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-XSRF-TOKEN': getXsrfToken(),
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({ providers: formData.value }),
+        });
+        router.reload({ only: ['providers'] });
+    } finally {
+        isSaving.value = false;
+    }
+}
+
+function toggleProvider(index: number) {
+    formData.value[index].is_enabled = !formData.value[index].is_enabled;
+}
+
+async function testProvider(providerKey: string) {
+    const state = testStates[providerKey] ?? { testing: false, result: null };
+    testStates[providerKey] = state;
+    state.testing = true;
+    state.result = null;
+
+    try {
+        const response = await fetch('/settings/ai-providers/test', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-XSRF-TOKEN': getXsrfToken(),
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({ provider: providerKey }),
+        });
+        const data = await response.json();
+        state.result = {
+            success: data.success ?? false,
+            message: data.message ?? 'Unknown response.',
+        };
+    } catch {
+        state.result = {
+            success: false,
+            message: 'Network error. Could not reach the test endpoint.',
+        };
+    } finally {
+        state.testing = false;
+    }
+}
+</script>
+
+<template>
+    <Head title="AI Providers" />
+    <div class="flex flex-col gap-6">
+        <Heading variant="small" title="AI Providers" description="Configure API keys for AI services. Save your key first, then test it." />
+
+        <div class="flex flex-col gap-4">
+            <div
+                v-for="(provider, index) in formData"
+                :key="provider.provider"
+                class="rounded-lg border p-4"
+            >
+                <div class="flex items-start justify-between gap-4">
+                    <div class="flex items-center gap-3">
+                        <button
+                            type="button"
+                            class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none"
+                            :class="provider.is_enabled ? 'bg-primary' : 'bg-muted'"
+                            @click="toggleProvider(index)"
+                        >
+                            <span
+                                class="pointer-events-none inline-block size-4 rounded-full bg-background shadow transition-transform"
+                                :class="provider.is_enabled ? 'translate-x-4' : 'translate-x-0'"
+                            />
+                        </button>
+                        <div>
+                            <p class="text-sm font-medium">{{ provider.display_name }}</p>
+                            <p class="text-xs text-muted-foreground">{{ provider.provider }}</p>
+                        </div>
+                    </div>
+
+                    <Button
+                        v-if="provider.is_enabled"
+                        variant="outline"
+                        size="sm"
+                        class="text-xs gap-1"
+                        :disabled="testStates[provider.provider]?.testing"
+                        @click="testProvider(provider.provider)"
+                    >
+                        <Loader2 v-if="testStates[provider.provider]?.testing" class="size-3 animate-spin" data-icon="inline-start" />
+                        <Wifi v-else class="size-3" data-icon="inline-start" />
+                        {{ testStates[provider.provider]?.testing ? 'Testing...' : 'Test' }}
+                    </Button>
+                </div>
+
+                <div
+                    v-if="testStates[provider.provider]?.result"
+                    class="mt-2 flex items-center gap-2 rounded-md px-3 py-1.5 text-xs"
+                    :class="testStates[provider.provider]?.result?.success
+                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                        : 'bg-destructive/10 text-destructive'"
+                >
+                    <Check v-if="testStates[provider.provider]?.result?.success" class="size-3.5" />
+                    <X v-else class="size-3.5" />
+                    {{ testStates[provider.provider]?.result?.message }}
+                </div>
+
+                <div v-if="provider.is_enabled" class="mt-4 flex flex-col gap-3">
+                    <div class="flex flex-col gap-1.5">
+                        <Label class="text-xs">API Key</Label>
+                        <Input
+                            v-model="formData[index].api_key"
+                            type="password"
+                            :placeholder="provider.api_key ? '•••••••• (unchanged)' : 'sk-...'"
+                            class="h-8 text-xs"
+                        />
+                    </div>
+                    <div class="flex flex-col gap-1.5">
+                        <Label class="text-xs">Default Model (optional)</Label>
+                        <Input
+                            v-model="formData[index].default_model"
+                            placeholder="e.g. gpt-4.1-mini, claude-3-5-sonnet..."
+                            class="h-8 text-xs"
+                        />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <Button :disabled="isSaving" @click="handleSave">
+                {{ isSaving ? 'Saving...' : 'Save AI Provider Configs' }}
+            </Button>
+            <p class="text-xs text-muted-foreground">
+                API keys are encrypted at rest. Save before testing.
+            </p>
+        </div>
+    </div>
+</template>
