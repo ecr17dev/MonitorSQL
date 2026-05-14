@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Settings\AiSettingsController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SecurityController;
 use Illuminate\Support\Facades\Route;
@@ -21,4 +22,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('user-password.update');
 
     Route::inertia('settings/appearance', 'settings/Appearance')->name('appearance.edit');
+
+    Route::get('settings/ai-providers', [AiSettingsController::class, 'editProviders'])
+        ->name('ai-providers.edit');
+    Route::post('settings/ai-providers', [AiSettingsController::class, 'updateProviders'])
+        ->name('ai-providers.update');
+    Route::post('settings/ai-providers/test', [AiSettingsController::class, 'testProvider'])
+        ->name('ai-providers.test');
+
+    Route::get('settings/system-prompt', [AiSettingsController::class, 'editPrompt'])
+        ->name('system-prompt.edit');
+    Route::post('settings/system-prompt', [AiSettingsController::class, 'updatePrompt'])
+        ->name('system-prompt.update');
 });
