@@ -1,0 +1,26 @@
+<?php
+
+namespace App\Http\Requests;
+
+use Illuminate\Foundation\Http\FormRequest;
+
+class ValidateQueryRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return $this->user()?->hasPermission('queries.execute') ?? false;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function rules(): array
+    {
+        return [
+            'connection_id' => ['required', 'integer', 'exists:database_connections,id'],
+            'sql' => ['required', 'string', 'min:1'],
+            'selected_tables' => ['sometimes', 'array'],
+            'selected_tables.*' => ['string', 'max:255'],
+        ];
+    }
+}
