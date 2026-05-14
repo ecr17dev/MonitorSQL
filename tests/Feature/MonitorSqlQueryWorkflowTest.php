@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Ai\Agents\SqlQueryAssistant;
 use App\Jobs\ProcessDataExportJob;
+use App\Models\AiMemoryProfile;
 use App\Models\ConnectionPermission;
 use App\Models\DatabaseConnection;
 use App\Models\Permission;
@@ -136,10 +137,134 @@ class MonitorSqlQueryWorkflowTest extends TestCase
             'explanation',
             'tables_used',
             'confidence',
+            'conversation_id',
+            'dialect',
+            'memory_applied' => ['short_term', 'long_term'],
             'requires_confirmation',
             'suggested_visualization' => ['type', 'x_axis', 'y_axis', 'reason'],
         ]);
         $response->assertJsonPath('requires_confirmation', true);
+        $response->assertJsonPath('dialect', 'pgsql');
+        $response->assertJsonPath('memory_applied.short_term', true);
+        $response->assertJsonPath('conversation_id', fn (mixed $value): bool => is_string($value) && $value !== '');
+
+        $profile = AiMemoryProfile::query()
+            ->where('user_id', $user->id)
+            ->where('connection_id', $connection->id)
+            ->first();
+
+        $this->assertNotNull($profile);
+        $this->assertIsArray($profile?->preferred_tables);
+    }
+
+    public function test_ai_generate_continues_existing_conversation_for_same_user()
+    {
+        SqlQueryAssistant::fake([
+            [
+                'sql' => 'SELECT * FROM customers LIMIT 10',
+                'explanation' => 'First response.',
+                'tables_used' => ['customers'],
+                'confidence' => 'high',
+                'suggested_visualization' => [
+                    'type' => 'table',
+                    'x_axis' => null,
+                    'y_axis' => null,
+                    'reason' => 'Rows are tabular.',
+                ],
+            ],
+            [
+                'sql' => 'SELECT COUNT(*) AS total FROM customers',
+                'explanation' => 'Second response.',
+                'tables_used' => ['customers'],
+                'confidence' => 'high',
+                'suggested_visualization' => [
+                    'type' => 'kpi',
+                    'x_axis' => null,
+                    'y_axis' => 'total',
+                    'reason' => 'Single metric.',
+                ],
+            ],
+        ]);
+
+        $user = $this->createUserWithPermission('queries.ai_generate');
+        $connection = $this->createConnection();
+        $this->grantTableAccess($user, $connection, 'customers');
+
+        $first = $this->actingAs($user)->postJson('/queries/ai-generate', [
+            'connection_id' => $connection->id,
+            'question' => 'List customers',
+            'selected_tables' => ['customers'],
+        ]);
+
+        $first->assertOk();
+        $conversationId = $first->json('conversation_id');
+        $this->assertIsString($conversationId);
+
+        $second = $this->actingAs($user)->postJson('/queries/ai-generate', [
+            'connection_id' => $connection->id,
+            'question' => 'Now count them',
+            'conversation_id' => $conversationId,
+            'selected_tables' => ['customers'],
+        ]);
+
+        $second->assertOk();
+        $second->assertJsonPath('conversation_id', $conversationId);
+    }
+
+    public function test_ai_generate_rejects_conversation_id_from_another_user()
+    {
+        SqlQueryAssistant::fake([
+            [
+                'sql' => 'SELECT * FROM customers LIMIT 10',
+                'explanation' => 'First response.',
+                'tables_used' => ['customers'],
+                'confidence' => 'high',
+                'suggested_visualization' => [
+                    'type' => 'table',
+                    'x_axis' => null,
+                    'y_axis' => null,
+                    'reason' => 'Rows are tabular.',
+                ],
+            ],
+            [
+                'sql' => 'SELECT * FROM customers LIMIT 5',
+                'explanation' => 'Other user response.',
+                'tables_used' => ['customers'],
+                'confidence' => 'medium',
+                'suggested_visualization' => [
+                    'type' => 'table',
+                    'x_axis' => null,
+                    'y_axis' => null,
+                    'reason' => 'Rows are tabular.',
+                ],
+            ],
+        ]);
+
+        $owner = $this->createUserWithPermission('queries.ai_generate');
+        $intruder = $this->createUserWithPermission('queries.ai_generate');
+        $connection = $this->createConnection();
+        $this->grantTableAccess($owner, $connection, 'customers');
+        $this->grantTableAccess($intruder, $connection, 'customers');
+
+        $first = $this->actingAs($owner)->postJson('/queries/ai-generate', [
+            'connection_id' => $connection->id,
+            'question' => 'List customers',
+            'selected_tables' => ['customers'],
+        ]);
+
+        $first->assertOk();
+        $conversationId = $first->json('conversation_id');
+        $this->assertIsString($conversationId);
+
+        $rejected = $this->actingAs($intruder)->postJson('/queries/ai-generate', [
+            'connection_id' => $connection->id,
+            'question' => 'Reuse that conversation',
+            'conversation_id' => $conversationId,
+            'selected_tables' => ['customers'],
+        ]);
+
+        $rejected->assertStatus(422);
+        $rejected->assertJsonPath('message', 'The provided conversation_id is invalid for this user.');
     }
 
     public function test_exports_can_be_queued_in_xlsx()
@@ -201,6 +326,25 @@ class MonitorSqlQueryWorkflowTest extends TestCase
         $response->assertJsonPath('message', 'The SQL engine returned a sanitized error response.');
     }
 
+    public function test_query_execute_blocks_dialect_mismatch_for_mysql_connection()
+    {
+        $user = $this->createUserWithPermission('queries.execute');
+        $connection = $this->createConnection(driver: 'mysql');
+        $this->grantTableAccess($user, $connection, 'customers');
+
+        $response = $this->actingAs($user)->postJson('/queries/execute', [
+            'connection_id' => $connection->id,
+            'sql' => "SELECT * FROM customers WHERE name ILIKE '%john%'",
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonPath('message', 'SQL validation failed.');
+        $this->assertTrue(
+            collect($response->json('errors', []))
+                ->contains(fn (mixed $error): bool => is_string($error) && str_contains($error, 'Dialect mismatch'))
+        );
+    }
+
     private function createUserWithPermission(string $permissionKey): User
     {
         $permission = Permission::query()->firstOrCreate([
@@ -221,13 +365,15 @@ class MonitorSqlQueryWorkflowTest extends TestCase
         return $user;
     }
 
-    private function createConnection(): DatabaseConnection
+    private function createConnection(string $driver = 'pgsql'): DatabaseConnection
     {
+        $defaultPort = $driver === 'pgsql' ? 5432 : 3306;
+
         return DatabaseConnection::query()->create([
             'name' => 'Local PG',
-            'driver' => 'pgsql',
+            'driver' => $driver,
             'host' => '127.0.0.1',
-            'port' => 5432,
+            'port' => $defaultPort,
             'database' => 'demo',
             'username' => 'readonly',
             'password' => 'secret',
