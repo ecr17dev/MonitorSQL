@@ -43,8 +43,18 @@ class AiSqlAssistantService
     ): array {
         $candidateTables = $selectedTables !== [] ? $selectedTables : $allowedTables;
         $dialect = $this->sqlDialectStrategy->resolveForDriver($connection->driver);
-        $memoryContext = $this->aiMemoryProfileService->promptContext($user, $connection->id);
-        $schemaContext = $this->schemaContextBuilder->build($connection, $allowedTables, $selectedTables);
+
+        try {
+            $memoryContext = $this->aiMemoryProfileService->promptContext($user, $connection->id);
+        } catch (Throwable) {
+            $memoryContext = ['applied' => false, 'context' => ''];
+        }
+
+        try {
+            $schemaContext = $this->schemaContextBuilder->build($connection, $allowedTables, $selectedTables);
+        } catch (Throwable) {
+            $schemaContext = ['context' => '(schema introspection failed)', 'tables_included' => []];
+        }
 
         if ($candidateTables === []) {
             return $this->withMetadata(

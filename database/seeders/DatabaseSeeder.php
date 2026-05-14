@@ -138,5 +138,7 @@ PROMPT,
                 'description' => 'SQL query assistant base system prompt.',
             ],
         );
+
+        $this->call(SuperAdminDemoSeeder::class);
     }
 }

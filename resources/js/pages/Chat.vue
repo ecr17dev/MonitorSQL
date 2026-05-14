@@ -232,7 +232,7 @@ async function sendPrompt(promptText: string): Promise<AiGeneratedSql | null> {
         }>('/queries/ai-generate', {
             connection_id: context.selectedConnectionId.value,
             question: promptText,
-            conversation_id: chat.conversationId.value,
+            ...(chat.conversationId.value ? { conversation_id: chat.conversationId.value } : {}),
             selected_tables: context.selectedTables.value,
         });
 

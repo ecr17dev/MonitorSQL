@@ -22,7 +22,11 @@ class SchemaContextBuilder
         $maxChars = max(2000, $maxSchemaTokens * 4);
         $dialect = $this->sqlDialectStrategy->resolveForDriver($connection->driver);
 
-        $tableList = $this->schemaIntrospectionService->listTables($connection);
+        try {
+            $tableList = $this->schemaIntrospectionService->listTables($connection);
+        } catch (\Throwable) {
+            $tableList = [];
+        }
 
         $tableByName = collect($tableList)
             ->filter(fn (array $table): bool => ! empty($table['name']))

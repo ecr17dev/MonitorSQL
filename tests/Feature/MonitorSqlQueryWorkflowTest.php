@@ -21,6 +21,13 @@ class MonitorSqlQueryWorkflowTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        config()->set('ai.conversations.generate_title', false);
+    }
+
     public function test_query_validation_blocks_write_statements()
     {
         $user = $this->createUserWithPermission('queries.execute');
@@ -323,7 +330,8 @@ class MonitorSqlQueryWorkflowTest extends TestCase
         ]);
 
         $response->assertStatus(422);
-        $response->assertJsonPath('message', 'The SQL engine returned a sanitized error response.');
+        $response->assertJsonPath('message', 'Error de base de datos: driver error');
+        $response->assertJsonPath('sql', 'SELECT * FROM customers LIMIT 100');
     }
 
     public function test_query_execute_blocks_dialect_mismatch_for_mysql_connection()

@@ -9,8 +9,8 @@ use App\Http\Requests\ValidateQueryRequest;
 use App\Models\DatabaseConnection;
 use App\Models\QueryRun;
 use App\Models\SavedQuery;
-use App\Services\AiSqlAssistantService;
 use App\Services\AiMemoryProfileService;
+use App\Services\AiSqlAssistantService;
 use App\Services\AuditService;
 use App\Services\QueryValidationService;
 use App\Services\ReadOnlyQueryExecutor;
@@ -111,6 +111,9 @@ class QueryController extends Controller
         } catch (Throwable $throwable) {
             report($throwable);
 
+            $dbMessage = $throwable->getPrevious()?->getMessage()
+                ?? $throwable->getMessage();
+
             $this->auditService->record(
                 action: 'query.failed',
                 user: $request->user(),
@@ -118,11 +121,12 @@ class QueryController extends Controller
                 sql: $validation['sql_with_limit'],
                 status: 'failed',
                 request: $request,
-                metadata: ['reason' => 'sanitized_sql_error'],
+                metadata: ['reason' => $dbMessage],
             );
 
             return response()->json([
-                'message' => 'The SQL engine returned a sanitized error response.',
+                'message' => 'Error de base de datos: '.$dbMessage,
+                'sql' => $validation['sql_with_limit'],
             ], 422);
         }
 
@@ -143,12 +147,16 @@ class QueryController extends Controller
         ]);
 
         if ($request->user() !== null) {
-            $this->aiMemoryProfileService->recordSuccessfulExecution(
-                user: $request->user(),
-                connectionId: $connection->id,
-                sql: $validation['sql_with_limit'],
-                tablesUsed: $validation['tables'],
-            );
+            try {
+                $this->aiMemoryProfileService->recordSuccessfulExecution(
+                    user: $request->user(),
+                    connectionId: $connection->id,
+                    sql: $validation['sql_with_limit'],
+                    tablesUsed: $validation['tables'],
+                );
+            } catch (Throwable) {
+                // memory recording is non-critical
+            }
         }
 
         $this->auditService->record(
