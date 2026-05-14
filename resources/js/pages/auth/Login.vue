@@ -14,8 +14,8 @@ import { request } from '@/routes/password';
 
 defineOptions({
     layout: {
-        title: 'Log in to your account',
-        description: 'Enter your email and password below to log in',
+        title: 'Iniciar sesión',
+        description: 'Ingresa tus credenciales para acceder a MonitorSQL',
     },
 });
 
@@ -27,11 +27,11 @@ defineProps<{
 </script>
 
 <template>
-    <Head title="Log in" />
+    <Head title="Iniciar sesión" />
 
     <div
         v-if="status"
-        class="mb-4 text-center text-sm font-medium text-green-600"
+        class="mb-4 rounded-lg bg-emerald-50 px-4 py-3 text-center text-sm font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
     >
         {{ status }}
     </div>
@@ -40,11 +40,11 @@ defineProps<{
         v-bind="store.form()"
         :reset-on-success="['password']"
         v-slot="{ errors, processing }"
-        class="flex flex-col gap-6"
+        class="flex flex-col gap-5"
     >
-        <div class="grid gap-6">
-            <div class="grid gap-2">
-                <Label for="email">Email address</Label>
+        <div class="flex flex-col gap-4">
+            <div class="flex flex-col gap-1.5">
+                <Label for="email" class="text-xs font-medium">Correo electrónico</Label>
                 <Input
                     id="email"
                     type="email"
@@ -53,21 +53,22 @@ defineProps<{
                     autofocus
                     :tabindex="1"
                     autocomplete="email"
-                    placeholder="email@example.com"
+                    placeholder="usuario@ejemplo.com"
+                    class="h-10"
                 />
                 <InputError :message="errors.email" />
             </div>
 
-            <div class="grid gap-2">
+            <div class="flex flex-col gap-1.5">
                 <div class="flex items-center justify-between">
-                    <Label for="password">Password</Label>
+                    <Label for="password" class="text-xs font-medium">Contraseña</Label>
                     <TextLink
                         v-if="canResetPassword"
                         :href="request()"
-                        class="text-sm"
+                        class="text-xs"
                         :tabindex="5"
                     >
-                        Forgot password?
+                        ¿Olvidaste tu contraseña?
                     </TextLink>
                 </div>
                 <PasswordInput
@@ -76,36 +77,36 @@ defineProps<{
                     required
                     :tabindex="2"
                     autocomplete="current-password"
-                    placeholder="Password"
+                    placeholder="••••••••"
                 />
                 <InputError :message="errors.password" />
             </div>
 
-            <div class="flex items-center justify-between">
-                <Label for="remember" class="flex items-center space-x-3">
-                    <Checkbox id="remember" name="remember" :tabindex="3" />
-                    <span>Remember me</span>
-                </Label>
+            <div class="flex items-center gap-2">
+                <Checkbox id="remember" name="remember" :tabindex="3" />
+                <Label for="remember" class="text-xs font-normal cursor-pointer">Recordarme</Label>
             </div>
 
             <Button
                 type="submit"
-                class="mt-4 w-full"
+                class="mt-1 h-10 w-full bg-[#155974] text-white shadow-md shadow-[#155974]/10 transition-all hover:bg-[#0a2d51] hover:shadow-lg hover:shadow-[#155974]/20"
                 :tabindex="4"
                 :disabled="processing"
                 data-test="login-button"
             >
-                <Spinner v-if="processing" />
-                Log in
+                <Spinner v-if="processing" data-icon="inline-start" />
+                {{ processing ? 'Ingresando...' : 'Iniciar sesión' }}
             </Button>
         </div>
 
         <div
-            class="text-center text-sm text-muted-foreground"
             v-if="canRegister"
+            class="text-center text-xs text-muted-foreground"
         >
-            Don't have an account?
-            <TextLink :href="register()" :tabindex="5">Sign up</TextLink>
+            ¿No tienes cuenta?
+            <TextLink :href="register()" :tabindex="6" class="font-medium">
+                Crear una cuenta
+            </TextLink>
         </div>
     </Form>
 </template>

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { Link } from '@inertiajs/vue3';
-import { BookOpen, FolderGit2, LayoutGrid } from 'lucide-vue-next';
+import { computed } from 'vue';
+import { Link, usePage } from '@inertiajs/vue3';
+import { Database, HardDrive, HardDriveDownload, History, MessageSquare, ShieldCheck, Users } from 'lucide-vue-next';
 import AppLogo from '@/components/AppLogo.vue';
-import NavFooter from '@/components/NavFooter.vue';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
 import {
@@ -14,29 +14,77 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { dashboard } from '@/routes';
+import { chat } from '@/routes';
 import type { NavItem } from '@/types';
 
-const mainNavItems: NavItem[] = [
-    {
-        title: 'Dashboard',
-        href: dashboard(),
-        icon: LayoutGrid,
-    },
-];
+const page = usePage();
 
-const footerNavItems: NavItem[] = [
-    {
-        title: 'Repository',
-        href: 'https://github.com/laravel/vue-starter-kit',
-        icon: FolderGit2,
-    },
-    {
-        title: 'Documentation',
-        href: 'https://laravel.com/docs/starter-kits#vue',
-        icon: BookOpen,
-    },
-];
+const permissions = computed<string[]>(() => {
+    return (page.props.auth?.permissions as string[] | undefined) ?? [];
+});
+
+const canViewConnections = computed<boolean>(() => permissions.value.includes('connections.view'));
+const canViewAudit = computed<boolean>(() => permissions.value.includes('audit.view'));
+const canRunQueries = computed<boolean>(() => permissions.value.includes('queries.execute'));
+const canExportQueries = computed<boolean>(() => permissions.value.includes('queries.export'));
+const canManagePlatform = computed<boolean>(() => permissions.value.includes('connections.create'));
+
+const mainNavItems = computed<NavItem[]>(() => {
+    const items: NavItem[] = [
+        {
+            title: 'Chat',
+            href: chat(),
+            icon: MessageSquare,
+        },
+    ];
+
+    if (canViewConnections.value) {
+        items.push({
+            title: 'Conexiones',
+            href: '/connections',
+            icon: Database,
+        });
+    }
+
+    if (canRunQueries.value) {
+        items.push({
+            title: 'Historial de consultas',
+            href: '/dashboard#query-history',
+            icon: History,
+        });
+    }
+
+    if (canViewAudit.value) {
+        items.push({
+            title: 'Auditoría',
+            href: '/dashboard#audit',
+            icon: ShieldCheck,
+        });
+    }
+
+    if (canExportQueries.value) {
+        items.push({
+            title: 'Cola de exportación',
+            href: '/exports/queue',
+            icon: HardDriveDownload,
+        });
+    }
+
+    if (canManagePlatform.value) {
+        items.push({
+            title: 'Usuarios / Roles / Permisos',
+            href: '/admin/access-control',
+            icon: Users,
+        });
+        items.push({
+            title: 'Respaldos',
+            href: '/backups',
+            icon: HardDrive,
+        });
+    }
+
+    return items;
+});
 </script>
 
 <template>
@@ -45,7 +93,7 @@ const footerNavItems: NavItem[] = [
             <SidebarMenu>
                 <SidebarMenuItem>
                     <SidebarMenuButton size="lg" as-child>
-                        <Link :href="dashboard()">
+                        <Link :href="chat()">
                             <AppLogo />
                         </Link>
                     </SidebarMenuButton>
@@ -58,7 +106,6 @@ const footerNavItems: NavItem[] = [
         </SidebarContent>
 
         <SidebarFooter>
-            <NavFooter :items="footerNavItems" />
             <NavUser />
         </SidebarFooter>
     </Sidebar>

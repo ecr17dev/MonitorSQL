@@ -16,24 +16,24 @@ defineProps<{
 
 defineOptions({
     layout: {
-        title: 'Create an account',
-        description: 'Enter your details below to create your account',
+        title: 'Crear cuenta',
+        description: 'Registrate para empezar a consultar tus bases de datos',
     },
 });
 </script>
 
 <template>
-    <Head title="Register" />
+    <Head title="Registrarse" />
 
     <Form
         v-bind="store.form()"
         :reset-on-success="['password', 'password_confirmation']"
         v-slot="{ errors, processing }"
-        class="flex flex-col gap-6"
+        class="flex flex-col gap-5"
     >
-        <div class="grid gap-6">
-            <div class="grid gap-2">
-                <Label for="name">Name</Label>
+        <div class="flex flex-col gap-4">
+            <div class="flex flex-col gap-1.5">
+                <Label for="name" class="text-xs font-medium">Nombre completo</Label>
                 <Input
                     id="name"
                     type="text"
@@ -42,13 +42,14 @@ defineOptions({
                     :tabindex="1"
                     autocomplete="name"
                     name="name"
-                    placeholder="Full name"
+                    placeholder="Tu nombre"
+                    class="h-10"
                 />
                 <InputError :message="errors.name" />
             </div>
 
-            <div class="grid gap-2">
-                <Label for="email">Email address</Label>
+            <div class="flex flex-col gap-1.5">
+                <Label for="email" class="text-xs font-medium">Correo electrónico</Label>
                 <Input
                     id="email"
                     type="email"
@@ -56,34 +57,35 @@ defineOptions({
                     :tabindex="2"
                     autocomplete="email"
                     name="email"
-                    placeholder="email@example.com"
+                    placeholder="usuario@ejemplo.com"
+                    class="h-10"
                 />
                 <InputError :message="errors.email" />
             </div>
 
-            <div class="grid gap-2">
-                <Label for="password">Password</Label>
+            <div class="flex flex-col gap-1.5">
+                <Label for="password" class="text-xs font-medium">Contraseña</Label>
                 <PasswordInput
                     id="password"
                     required
                     :tabindex="3"
                     autocomplete="new-password"
                     name="password"
-                    placeholder="Password"
+                    placeholder="Mínimo 8 caracteres"
                     :passwordrules="passwordRules"
                 />
                 <InputError :message="errors.password" />
             </div>
 
-            <div class="grid gap-2">
-                <Label for="password_confirmation">Confirm password</Label>
+            <div class="flex flex-col gap-1.5">
+                <Label for="password_confirmation" class="text-xs font-medium">Confirmar contraseña</Label>
                 <PasswordInput
                     id="password_confirmation"
                     required
                     :tabindex="4"
                     autocomplete="new-password"
                     name="password_confirmation"
-                    placeholder="Confirm password"
+                    placeholder="Repite tu contraseña"
                     :passwordrules="passwordRules"
                 />
                 <InputError :message="errors.password_confirmation" />
@@ -91,24 +93,21 @@ defineOptions({
 
             <Button
                 type="submit"
-                class="mt-2 w-full"
+                class="mt-1 h-10 w-full bg-[#155974] text-white shadow-md shadow-[#155974]/10 transition-all hover:bg-[#0a2d51] hover:shadow-lg hover:shadow-[#155974]/20"
                 tabindex="5"
                 :disabled="processing"
                 data-test="register-user-button"
             >
-                <Spinner v-if="processing" />
-                Create account
+                <Spinner v-if="processing" data-icon="inline-start" />
+                {{ processing ? 'Creando cuenta...' : 'Crear cuenta' }}
             </Button>
         </div>
 
-        <div class="text-center text-sm text-muted-foreground">
-            Already have an account?
-            <TextLink
-                :href="login()"
-                class="underline underline-offset-4"
-                :tabindex="6"
-                >Log in</TextLink
-            >
+        <div class="text-center text-xs text-muted-foreground">
+            ¿Ya tienes cuenta?
+            <TextLink :href="login()" :tabindex="6" class="font-medium">
+                Iniciar sesión
+            </TextLink>
         </div>
     </Form>
 </template>
