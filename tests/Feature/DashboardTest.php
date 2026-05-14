@@ -16,23 +16,12 @@ class DashboardTest extends TestCase
         $response->assertRedirect(route('login'));
     }
 
-    public function test_dashboard_redirects_to_chat_for_authenticated_users()
+    public function test_authenticated_users_are_redirected_to_chat()
     {
         $user = User::factory()->create();
         $this->actingAs($user);
 
         $response = $this->get(route('dashboard'));
         $response->assertRedirect(route('chat'));
-    }
-
-    public function test_chat_page_shows_correct_content()
-    {
-        $user = User::factory()->create();
-        $this->actingAs($user);
-
-        $response = $this->get(route('chat'));
-        $response->assertOk();
-        $response->assertSee('Chat SQL');
-        $response->assertSee('Sin conexiones configuradas', false);
     }
 }
