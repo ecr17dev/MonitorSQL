@@ -1,22 +1,18 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { Head, usePage } from '@inertiajs/vue3';
 import { Send, Trash2 } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import ChatMessage from '@/components/ChatMessage.vue';
 import SqlCard from '@/components/SqlCard.vue';
 import SqlEditor from '@/components/SqlEditor.vue';
 import ResultTabs from '@/components/ResultTabs.vue';
 import ContextPanel from '@/components/ContextPanel.vue';
 import ModeToggle from '@/components/ModeToggle.vue';
-import SuggestionChips from '@/components/SuggestionChips.vue';
-import {
-    useChat,
-    type ChatMessage as ChatMessageType,
-} from '@/composables/useChat';
+import { useChat } from '@/composables/useChat';
 import {
     useSqlGeneration,
     type AiGeneratedSql,
@@ -26,6 +22,17 @@ import { useContext, type Connection } from '@/composables/useContext';
 import { chat as chatRoute } from '@/routes';
 
 type ConnectionProp = Connection;
+
+type StoredChatState = {
+    messages: Array<{
+        id: number;
+        role: 'user' | 'assistant';
+        content: string;
+        timestamp: string;
+    }>;
+    input: string;
+    conversationId: string | null;
+};
 
 defineOptions({
     layout: {
@@ -58,8 +65,13 @@ const queryExec = useQueryExecution();
 const context = useContext(props.connections);
 
 const manualSql = ref('SELECT 1 AS status');
-const currentQuestion = ref('');
 const messagesContainer = ref<HTMLElement | null>(null);
+const chatStoragePrefix = 'monitorsql.chat.v1';
+
+const authUserId = computed<number | null>(() => {
+    const auth = page.props.auth as { user?: { id?: number } } | undefined;
+    return auth?.user?.id ?? null;
+});
 
 function getXsrfToken(): string {
     const token = document.cookie
@@ -102,6 +114,80 @@ function scrollToBottom() {
     });
 }
 
+function currentStorageKey(): string | null {
+    if (authUserId.value === null || context.selectedConnectionId.value === null) {
+        return null;
+    }
+
+    return `${chatStoragePrefix}:${authUserId.value}:${context.selectedConnectionId.value}`;
+}
+
+function saveChatState(): void {
+    const key = currentStorageKey();
+
+    if (key === null) {
+        return;
+    }
+
+    const payload: StoredChatState = {
+        messages: chat.messages.value.map((message) => ({
+            id: message.id,
+            role: message.role,
+            content: message.content,
+            timestamp: message.timestamp.toISOString(),
+        })),
+        input: chat.input.value,
+        conversationId: chat.conversationId.value,
+    };
+
+    localStorage.setItem(key, JSON.stringify(payload));
+}
+
+function loadChatState(): void {
+    const key = currentStorageKey();
+
+    if (key === null) {
+        return;
+    }
+
+    const raw = localStorage.getItem(key);
+
+    if (!raw) {
+        return;
+    }
+
+    try {
+        const parsed = JSON.parse(raw) as StoredChatState;
+        chat.messages.value = (parsed.messages ?? []).map((message) => ({
+            id: message.id,
+            role: message.role,
+            content: message.content,
+            timestamp: new Date(message.timestamp),
+        }));
+        chat.input.value = parsed.input ?? '';
+        chat.conversationId.value = parsed.conversationId ?? null;
+    } catch {
+        // Ignore malformed local state and keep defaults.
+    }
+}
+
+function clearCurrentChatState(): void {
+    const key = currentStorageKey();
+
+    if (key !== null) {
+        localStorage.removeItem(key);
+    }
+}
+
+function pushInitialAssistantGreeting(): void {
+    if (chat.messages.value.length === 0) {
+        chat.pushMessage(
+            'assistant',
+            'Hola, soy MonitorSQL. Pregúntame sobre tus datos en lenguaje natural y generaré SQL seguro para ti.',
+        );
+    }
+}
+
 async function sendPrompt(promptText: string): Promise<AiGeneratedSql | null> {
     if (!promptText.trim()) {
         return null;
@@ -129,6 +215,13 @@ async function sendPrompt(promptText: string): Promise<AiGeneratedSql | null> {
             explanation: string;
             tables_used: string[];
             confidence: string;
+            conversation_id: string | null;
+            dialect: 'mysql' | 'mariadb' | 'pgsql';
+            memory_applied: {
+                short_term: boolean;
+                long_term: boolean;
+            };
+            adaptation_note?: string;
             requires_confirmation?: boolean;
             suggested_visualization: {
                 type: string;
@@ -139,6 +232,7 @@ async function sendPrompt(promptText: string): Promise<AiGeneratedSql | null> {
         }>('/queries/ai-generate', {
             connection_id: context.selectedConnectionId.value,
             question: promptText,
+            conversation_id: chat.conversationId.value,
             selected_tables: context.selectedTables.value,
         });
 
@@ -153,10 +247,15 @@ async function sendPrompt(promptText: string): Promise<AiGeneratedSql | null> {
 
         sqlGen.setGenerated(generated);
         manualSql.value = payload.sql;
+        chat.conversationId.value = payload.conversation_id;
+
+        const adaptationMessage = payload.adaptation_note
+            ? `${payload.adaptation_note} (dialecto: ${payload.dialect}).`
+            : `Consulta adaptada al dialecto ${payload.dialect}.`;
 
         chat.pushMessage(
             'assistant',
-            `He generado esta consulta SQL para responder a tu pregunta. Revísala y ejecútala cuando estés listo.`,
+            `He generado esta consulta SQL para responder a tu pregunta. ${adaptationMessage} Revísala y ejecútala cuando estés listo.`,
         );
 
         return generated;
@@ -176,7 +275,6 @@ async function handleSend() {
     if (!text) return;
 
     chat.pushMessage('user', text);
-    currentQuestion.value = text;
     chat.input.value = '';
     scrollToBottom();
 
@@ -220,13 +318,6 @@ async function executeQuery(sql: string): Promise<void> {
     }
 }
 
-async function handleFollowUp(followUpText: string) {
-    chat.pushMessage('user', followUpText);
-    scrollToBottom();
-
-    await sendPrompt(followUpText);
-}
-
 function handleSuggestionSelect(prompt: string) {
     chat.input.value = prompt;
 }
@@ -258,18 +349,43 @@ async function handleExport(format: 'csv' | 'xlsx' | 'json') {
 }
 
 function handleClearChat() {
+    clearCurrentChatState();
     chat.reset();
     sqlGen.clearGenerated();
     queryExec.clearResult();
-    chat.pushMessage(
-        'assistant',
-        'Hola, soy MonitorSQL. Pregúntame sobre tus datos en lenguaje natural y generaré SQL seguro para ti.',
-    );
+    pushInitialAssistantGreeting();
 }
 
 onMounted(() => {
+    loadChatState();
+    pushInitialAssistantGreeting();
     scrollToBottom();
 });
+
+watch(
+    () => context.selectedConnectionId.value,
+    () => {
+        chat.reset();
+        sqlGen.clearGenerated();
+        queryExec.clearResult();
+        loadChatState();
+        pushInitialAssistantGreeting();
+        scrollToBottom();
+    },
+);
+
+watch(
+    [
+        () => chat.messages.value,
+        () => chat.input.value,
+        () => chat.conversationId.value,
+        () => context.selectedConnectionId.value,
+    ],
+    () => {
+        saveChatState();
+    },
+    { deep: true },
+);
 </script>
 
 <template>

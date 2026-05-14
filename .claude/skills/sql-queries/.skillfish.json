@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "name": "sql-queries",
+  "owner": "anthropics",
+  "repo": "knowledge-work-plugins",
+  "path": "data/skills/sql-queries",
+  "branch": "main",
+  "sha": "508444de634ec4ba9178750b6cbc897fe9f9c169",
+  "source": "manual"
+}

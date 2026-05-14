@@ -3,13 +3,20 @@
 namespace App\Services;
 
 use App\Ai\Agents\SqlQueryAssistant;
+use App\Models\DatabaseConnection;
+use App\Models\User;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 use Throwable;
 
 class AiSqlAssistantService
 {
-    public function __construct(private readonly QueryValidationService $queryValidationService) {}
+    public function __construct(
+        private readonly QueryValidationService $queryValidationService,
+        private readonly SqlDialectStrategy $sqlDialectStrategy,
+        private readonly SchemaContextBuilder $schemaContextBuilder,
+        private readonly AiMemoryProfileService $aiMemoryProfileService,
+    ) {}
 
     /**
      * @param  array<int, string>  $allowedTables
@@ -19,20 +26,51 @@ class AiSqlAssistantService
      *   explanation: string,
      *   tables_used: array<int, string>,
      *   confidence: string,
-     *   suggested_visualization: array{type: string, x_axis: string|null, y_axis: string|null, reason: string}
+     *   suggested_visualization: array{type: string, x_axis: string|null, y_axis: string|null, reason: string},
+     *   conversation_id: string|null,
+     *   dialect: string,
+     *   memory_applied: array{short_term: bool, long_term: bool},
+     *   adaptation_note: string
      * }
      */
-    public function generateStructuredQuery(string $question, array $allowedTables, array $selectedTables = []): array
-    {
+    public function generateStructuredQuery(
+        User $user,
+        DatabaseConnection $connection,
+        string $question,
+        array $allowedTables,
+        array $selectedTables = [],
+        ?string $conversationId = null,
+    ): array {
         $candidateTables = $selectedTables !== [] ? $selectedTables : $allowedTables;
+        $dialect = $this->sqlDialectStrategy->resolveForDriver($connection->driver);
+        $memoryContext = $this->aiMemoryProfileService->promptContext($user, $connection->id);
+        $schemaContext = $this->schemaContextBuilder->build($connection, $allowedTables, $selectedTables);
 
         if ($candidateTables === []) {
-            return $this->emptyResponse();
+            return $this->withMetadata(
+                response: $this->emptyResponse(),
+                conversationId: null,
+                dialect: $dialect,
+                shortTermMemoryApplied: false,
+                longTermMemoryApplied: $memoryContext['applied'],
+            );
         }
 
         try {
-            $response = SqlQueryAssistant::make()->prompt(
-                prompt: $this->buildPrompt($question, $allowedTables, $selectedTables),
+            $agent = SqlQueryAssistant::make();
+            $agent = $conversationId !== null
+                ? $agent->continue($conversationId, $user)
+                : $agent->forUser($user);
+
+            $response = $agent->prompt(
+                prompt: $this->buildPrompt(
+                    question: $question,
+                    dialect: $dialect,
+                    allowedTables: $allowedTables,
+                    selectedTables: $selectedTables,
+                    schemaContext: $schemaContext['context'],
+                    longTermMemoryContext: $memoryContext['context'],
+                ),
                 provider: $this->resolveProviderChain(),
                 timeout: (int) config('monitorsql.ai.sql_timeout', 60),
             );
@@ -41,15 +79,47 @@ class AiSqlAssistantService
                 ? (array) $response->toArray()
                 : (json_decode((string) $response, true) ?: []);
 
-            $normalized = $this->normalizeStructuredResponse($structured, $candidateTables);
+            $normalized = $this->normalizeStructuredResponse(
+                structured: $structured,
+                candidateTables: $schemaContext['tables_included'] !== [] ? $schemaContext['tables_included'] : $candidateTables,
+            );
 
-            return $this->finalizeQuery($normalized, $allowedTables);
+            $finalized = $this->finalizeQuery(
+                response: $normalized,
+                allowedTables: $allowedTables,
+                dialect: $dialect,
+            );
+
+            if ($finalized['sql'] !== '') {
+                $this->aiMemoryProfileService->recordGeneratedSuggestion(
+                    user: $user,
+                    connectionId: $connection->id,
+                    question: $question,
+                    sql: $finalized['sql'],
+                    tablesUsed: $finalized['tables_used'],
+                );
+            }
+
+            return $this->withMetadata(
+                response: $finalized,
+                conversationId: $response->conversationId,
+                dialect: $dialect,
+                shortTermMemoryApplied: $response->conversationId !== null,
+                longTermMemoryApplied: $memoryContext['applied'],
+            );
         } catch (Throwable $throwable) {
             report($throwable);
 
-            return $this->finalizeQuery(
-                $this->heuristicResponse($question, $candidateTables),
-                $allowedTables,
+            return $this->withMetadata(
+                response: $this->finalizeQuery(
+                    response: $this->heuristicResponse($question, $candidateTables),
+                    allowedTables: $allowedTables,
+                    dialect: $dialect,
+                ),
+                conversationId: null,
+                dialect: $dialect,
+                shortTermMemoryApplied: false,
+                longTermMemoryApplied: $memoryContext['applied'],
             );
         }
     }
@@ -120,12 +190,13 @@ class AiSqlAssistantService
      *   suggested_visualization: array{type: string, x_axis: string|null, y_axis: string|null, reason: string}
      * }
      */
-    private function finalizeQuery(array $response, array $allowedTables): array
+    private function finalizeQuery(array $response, array $allowedTables, string $dialect): array
     {
         $validation = $this->queryValidationService->validate(
             $response['sql'],
             (int) config('monitorsql.max_rows', 1000),
             $allowedTables,
+            $dialect,
         );
 
         $response['sql'] = $validation['sql_with_limit'];
@@ -143,14 +214,24 @@ class AiSqlAssistantService
      * @param  array<int, string>  $allowedTables
      * @param  array<int, string>  $selectedTables
      */
-    private function buildPrompt(string $question, array $allowedTables, array $selectedTables): string
-    {
+    private function buildPrompt(
+        string $question,
+        string $dialect,
+        array $allowedTables,
+        array $selectedTables,
+        string $schemaContext,
+        string $longTermMemoryContext,
+    ): string {
         $tablesContext = $this->formatTableList($allowedTables);
         $selectedContext = $selectedTables === [] ? 'none' : $this->formatTableList($selectedTables);
+        $dialectRules = $this->sqlDialectStrategy->promptRules($dialect);
 
         return <<<PROMPT
 User question:
 {$question}
+
+Dialect rules:
+{$dialectRules}
 
 Allowed tables (use fuzzy matching for Spanish/English terms):
 {$tablesContext}
@@ -158,7 +239,15 @@ Allowed tables (use fuzzy matching for Spanish/English terms):
 Selected tables (preferred scope, or 'none' for all):
 {$selectedContext}
 
-Return a strictly valid structured response. If the user's term doesn't exactly match a table name, use your reasoning to find the closest match.
+Schema context (tables, columns, types):
+{$schemaContext}
+
+Long-term memory profile context:
+{$longTermMemoryContext}
+
+Return a strictly valid structured response.
+If a term doesn't exactly match a table, infer the closest allowed match.
+Use read-only analytical patterns (CTEs, windows, deduplication, cohorts, funnels) only when supported by the active dialect.
 PROMPT;
     }
 
@@ -172,39 +261,8 @@ PROMPT;
         }
 
         return collect($tables)
-            ->map(fn (string $table): string => sprintf('  %s → %s', $table, $this->describeTable($table)))
+            ->map(fn (string $table): string => sprintf('  - %s', $table))
             ->implode("\n");
-    }
-
-    private function describeTable(string $table): string
-    {
-        $descriptions = [
-            'contacts' => 'contactos, información de contacto',
-            'users' => 'usuarios del sistema',
-            'properties' => 'propiedades inmobiliarias',
-            'property_images' => 'imágenes/fotos de propiedades',
-            'property_market_data' => 'datos de mercado de propiedades',
-            'property_saved' => 'propiedades guardadas/favoritas',
-            'pending_offers' => 'ofertas pendientes',
-            'offer_history' => 'historial de ofertas',
-            'negotiations' => 'negociaciones',
-            'buyer_preferences' => 'preferencias de compradores',
-            'buyer_notification_preferences' => 'preferencias de notificación de compradores',
-            'cms_contents' => 'contenido del CMS',
-            'activity_logs' => 'registros de actividad/logs del sistema',
-            'ai_agent_settings' => 'configuración de agentes IA',
-            'sessions' => 'sesiones de usuario',
-            'cache' => 'datos de caché',
-            'cache_locks' => 'bloqueos de caché',
-            'failed_jobs' => 'trabajos fallidos',
-            'job_batches' => 'lotes de trabajos',
-            'jobs' => 'cola de trabajos',
-            'migrations' => 'migraciones de base de datos',
-            'password_reset_tokens' => 'tokens de restablecimiento de contraseña',
-            'personal_access_tokens' => 'tokens de acceso personal',
-        ];
-
-        return $descriptions[$table] ?? 'datos de '.$table;
     }
 
     /**
@@ -298,6 +356,45 @@ PROMPT;
                 'y_axis' => null,
                 'reason' => 'No table was available for SQL generation.',
             ],
+        ];
+    }
+
+    /**
+     * @param  array{
+     *   sql: string,
+     *   explanation: string,
+     *   tables_used: array<int, string>,
+     *   confidence: string,
+     *   suggested_visualization: array{type: string, x_axis: string|null, y_axis: string|null, reason: string}
+     * }  $response
+     * @return array{
+     *   sql: string,
+     *   explanation: string,
+     *   tables_used: array<int, string>,
+     *   confidence: string,
+     *   suggested_visualization: array{type: string, x_axis: string|null, y_axis: string|null, reason: string},
+     *   conversation_id: string|null,
+     *   dialect: string,
+     *   memory_applied: array{short_term: bool, long_term: bool},
+     *   adaptation_note: string
+     * }
+     */
+    private function withMetadata(
+        array $response,
+        ?string $conversationId,
+        string $dialect,
+        bool $shortTermMemoryApplied,
+        bool $longTermMemoryApplied,
+    ): array {
+        return [
+            ...$response,
+            'conversation_id' => $conversationId,
+            'dialect' => $dialect,
+            'memory_applied' => [
+                'short_term' => $shortTermMemoryApplied,
+                'long_term' => $longTermMemoryApplied,
+            ],
+            'adaptation_note' => $this->sqlDialectStrategy->adaptationNote($dialect),
         ];
     }
 
