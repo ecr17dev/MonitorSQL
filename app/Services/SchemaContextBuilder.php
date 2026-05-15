@@ -37,6 +37,10 @@ class SchemaContextBuilder
             ->unique()
             ->values();
 
+        $totalTables = $orderedCandidates->count();
+        $includedCount = 0;
+        $skippedTables = [];
+
         $header = [
             sprintf('Active SQL dialect: %s', $dialect),
             'Use only these authorized tables and columns.',
@@ -51,6 +55,8 @@ class SchemaContextBuilder
             $tableMeta = $tableByName->get($tableName);
 
             if (! is_array($tableMeta)) {
+                $skippedTables[] = (string) $tableName;
+
                 continue;
             }
 
@@ -58,7 +64,10 @@ class SchemaContextBuilder
 
             try {
                 $columns = $this->schemaIntrospectionService->describeTable($connection, $qualifiedName);
+                $foreignKeys = $this->schemaIntrospectionService->describeForeignKeys($connection, $qualifiedName);
             } catch (\Throwable) {
+                $skippedTables[] = (string) $tableName;
+
                 continue;
             }
 
@@ -75,15 +84,81 @@ class SchemaContextBuilder
                 })
                 ->implode("\n");
 
-            $section = sprintf("Table: %s\n%s\n\n", $qualifiedName, $columnLines);
+            $allowedFkLines = collect($foreignKeys)
+                ->filter(function (array $fk) use ($allowedTables): bool {
+                    $refTable = $fk['referenced_table'];
+
+                    return in_array($refTable, $allowedTables, true);
+                })
+                ->map(function (array $fk): string {
+                    return sprintf(
+                        '  - %s -> %s(%s)',
+                        (string) $fk['column'],
+                        (string) $fk['referenced_table'],
+                        (string) $fk['referenced_column'],
+                    );
+                })
+                ->implode("\n");
+
+            $restrictedFkLines = collect($foreignKeys)
+                ->filter(function (array $fk) use ($allowedTables): bool {
+                    $refTable = $fk['referenced_table'];
+
+                    return ! in_array($refTable, $allowedTables, true);
+                })
+                ->map(function (array $fk): string {
+                    return sprintf(
+                        '  - %s -> %s(%s) [WARNING: referenced table "%s" is NOT available for JOIN - do not use it]',
+                        (string) $fk['column'],
+                        (string) $fk['referenced_table'],
+                        (string) $fk['referenced_column'],
+                        (string) $fk['referenced_table'],
+                    );
+                })
+                ->implode("\n");
+
+            $fkSection = '';
+
+            if ($allowedFkLines !== '') {
+                $fkSection .= sprintf("Foreign keys (to allowed tables):\n%s\n", $allowedFkLines);
+            }
+
+            if ($restrictedFkLines !== '') {
+                $fkSection .= sprintf("\nForeign keys (to RESTRICTED tables — DO NOT JOIN):\n%s\n", $restrictedFkLines);
+            }
+
+            $section = sprintf("Table: %s\n%s\n", $qualifiedName, $columnLines);
+
+            if ($fkSection !== '') {
+                $section .= $fkSection."\n";
+            }
+
+            $section .= "\n";
 
             if (strlen($context.$section) > $maxChars) {
                 $truncated = true;
+                // Collect remaining table names for the truncation notice
+                $remaining = $orderedCandidates->slice($includedCount)->values();
+                foreach ($remaining as $remainingTable) {
+                    $skippedTables[] = (string) $remainingTable;
+                }
                 break;
             }
 
             $context .= $section;
             $tablesIncluded[] = (string) $tableName;
+            $includedCount++;
+        }
+
+        if ($truncated && $skippedTables !== []) {
+            $uniqueSkipped = array_values(array_unique($skippedTables));
+            $context .= sprintf(
+                "\nSCHEMA TRUNCATION NOTICE: %d of %d tables were included due to size limits.\n",
+                $includedCount,
+                $totalTables,
+            );
+            $context .= 'The following tables exist but their schema was omitted: '.implode(', ', $uniqueSkipped)."\n";
+            $context .= "These tables still exist and can be used in queries, but only columns visible above are verified.\n";
         }
 
         if ($tablesIncluded === []) {
@@ -100,6 +175,7 @@ class SchemaContextBuilder
             'context' => trim($context),
             'tables_included' => $tablesIncluded,
             'truncated' => $truncated,
+            'skipped_tables' => $skippedTables,
         ];
     }
 

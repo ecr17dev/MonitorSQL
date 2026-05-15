@@ -28,6 +28,7 @@ class AiMemoryProfileService
         $preferredTables = $this->topCounts($profile->preferred_tables ?? []);
         $patterns = $this->topCounts($profile->successful_query_patterns ?? []);
         $aliases = collect($profile->term_aliases ?? [])->take(8);
+        $hallucinated = collect($profile->hallucinated_tables ?? [])->take(10);
 
         $lines = ['Long-term memory signals (user + connection):'];
 
@@ -44,6 +45,11 @@ class AiMemoryProfileService
 
         if ($patterns !== []) {
             $lines[] = 'Successful analytical patterns: '.collect($patterns)->keys()->implode(', ');
+        }
+
+        if ($hallucinated->isNotEmpty()) {
+            $hallucinatedText = $hallucinated->keys()->implode(', ');
+            $lines[] = 'PREVIOUSLY HALLUCINATED TABLES — these were referenced in past attempts but do NOT exist in this database. DO NOT use them: '.$hallucinatedText;
         }
 
         return [
@@ -100,6 +106,35 @@ class AiMemoryProfileService
         $profile->save();
     }
 
+    /**
+     * Record a table that the AI hallucinated (invented a table that doesn't exist).
+     * This is used to warn future prompts against referencing these tables.
+     */
+    public function recordHallucinatedTable(User $user, int $connectionId, string $table): void
+    {
+        $profile = $this->findOrCreate($user, $connectionId);
+
+        $profile->hallucinated_tables = $this->incrementCounts(
+            $profile->hallucinated_tables ?? [],
+            [$table],
+        );
+
+        $profile->last_used_at = now();
+        $profile->save();
+    }
+
+    /**
+     * Record multiple hallucinated tables at once.
+     *
+     * @param  array<int, string>  $tables
+     */
+    public function recordHallucinatedTables(User $user, int $connectionId, array $tables): void
+    {
+        foreach ($tables as $table) {
+            $this->recordHallucinatedTable($user, $connectionId, $table);
+        }
+    }
+
     private function findOrCreate(User $user, int $connectionId): AiMemoryProfile
     {
         return AiMemoryProfile::query()->firstOrCreate(
@@ -111,6 +146,7 @@ class AiMemoryProfileService
                 'preferred_tables' => [],
                 'term_aliases' => [],
                 'successful_query_patterns' => [],
+                'hallucinated_tables' => [],
                 'last_used_at' => now(),
             ],
         );

@@ -257,7 +257,12 @@ class QueryValidationService
      */
     private function extractTables(string $sql): array
     {
-        preg_match_all('/\b(?:from|join)\s+([a-zA-Z0-9_`".]+)/i', $sql, $matches);
+        // Match FROM and all JOIN variants: JOIN, LEFT JOIN, RIGHT JOIN, INNER JOIN, CROSS JOIN, FULL JOIN, NATURAL JOIN
+        preg_match_all(
+            '/\b(?:from|(?:natural\s+)?(?:(?:left|right|inner|cross|full)\s+)?join)\s+([a-zA-Z0-9_`".]+)/i',
+            $sql,
+            $matches,
+        );
 
         $tables = collect($matches[1] ?? [])
             ->map(function (string $table): string {
@@ -276,6 +281,66 @@ class QueryValidationService
             ->all();
 
         return is_array($tables) ? $tables : [];
+    }
+
+    /**
+     * Extract column names referenced in a SQL query.
+     *
+     * @return array<int, string>
+     */
+    public function extractColumns(string $sql): array
+    {
+        $normalized = $this->normalize($sql);
+        $withoutStrings = $this->stripQuotedStrings($normalized);
+
+        // Match qualified column references: table.column or alias.column
+        preg_match_all(
+            '/\b([a-zA-Z0-9_]+)\.([a-zA-Z0-9_]+)\b/',
+            $withoutStrings,
+            $matches,
+        );
+
+        $aliases = $this->aliasToTable($normalized);
+
+        return collect($matches[2] ?? [])
+            ->filter(fn (string $col): bool => preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $col) === 1)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Parse table aliases from the SQL query.
+     *
+     * @return array<string, string> alias => table
+     */
+    private function aliasToTable(string $sql): array
+    {
+        $aliases = [];
+        $normalized = $this->normalize($sql);
+
+        // Match: FROM table alias or JOIN table alias
+        preg_match_all(
+            '/\b(?:from|join)\s+([a-zA-Z0-9_`".]+)\s+(?:as\s+)?([a-zA-Z0-9_]+)(?:\s|$|,|;)/i',
+            $normalized,
+            $matches,
+        );
+
+        foreach ($matches[1] as $index => $table) {
+            $alias = $matches[2][$index];
+            $cleanTable = Str::of($table)
+                ->replace('"', '')
+                ->replace('`', '')
+                ->replace("'", '')
+                ->afterLast('.')
+                ->toString();
+
+            if ($cleanTable !== $alias && preg_match('/^[a-z_][a-z0-9_]*$/i', $alias)) {
+                $aliases[$alias] = $cleanTable;
+            }
+        }
+
+        return $aliases;
     }
 
     private function appendLimit(string $sql, int $maxRows): string
