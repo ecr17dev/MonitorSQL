@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'preferred_tables',
     'term_aliases',
     'successful_query_patterns',
+    'hallucinated_tables',
     'last_used_at',
 ])]
 class AiMemoryProfile extends Model
@@ -25,6 +26,7 @@ class AiMemoryProfile extends Model
             'preferred_tables' => 'array',
             'term_aliases' => 'array',
             'successful_query_patterns' => 'array',
+            'hallucinated_tables' => 'array',
             'last_used_at' => 'datetime',
         ];
     }

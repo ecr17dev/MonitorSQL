@@ -8,11 +8,12 @@ return [
 
     'ai' => [
         'provider' => env('AI_DEFAULT_PROVIDER', 'openai'),
-        'model' => env('AI_DEFAULT_MODEL', 'gpt-4.1-mini'),
+        'model' => env('AI_DEFAULT_MODEL', 'gpt-4o'),
         'fallback_provider' => env('AI_FALLBACK_PROVIDER', 'anthropic'),
         'fallback_model' => env('AI_FALLBACK_MODEL'),
         'sql_timeout' => (int) env('AI_SQL_TIMEOUT', 60),
         'max_schema_tokens' => (int) env('AI_SQL_MAX_SCHEMA_TOKENS', 12000),
+        'temperature' => (float) env('AI_TEMPERATURE', 0.1),
     ],
 
     'rate_limits' => [
