@@ -15,7 +15,7 @@
 MonitorSQL es una plataforma web que permite a usuarios autorizados explorar bases de datos SQL de forma **solo lectura**, consultar información usando lenguaje natural asistido por **inteligencia artificial**, visualizar resultados con gráficos y exportar datos — todo sin exponer permisos de escritura.
 
 <p align="center">
-  <img src="public/logo.svg" alt="MonitorSQL" width="200" />
+  <img width="100%"  alt="image" src="https://github.com/user-attachments/assets/e4faa364-d571-431c-bb24-9cc6bdc82ea5" />
 </p>
 
 ### ¿Por qué MonitorSQL?
