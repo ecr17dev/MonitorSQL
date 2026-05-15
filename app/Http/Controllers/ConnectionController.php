@@ -53,7 +53,7 @@ class ConnectionController extends Controller
             'created_by' => $request->user()?->id,
         ]);
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Connection created.')]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Conexión creada correctamente.')]);
 
         return back();
     }
@@ -88,7 +88,7 @@ class ConnectionController extends Controller
 
         $connection->update($payload);
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Connection updated.')]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Conexión actualizada correctamente.')]);
 
         return back();
     }
@@ -97,7 +97,7 @@ class ConnectionController extends Controller
     {
         $connection->delete();
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Connection deleted.')]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Conexión eliminada correctamente.')]);
 
         return back();
     }

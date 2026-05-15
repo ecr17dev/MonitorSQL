@@ -102,6 +102,54 @@ class SchemaIntrospectionService
     }
 
     /**
+     * @return array<int, array{column: string, referenced_table: string, referenced_column: string}>
+     */
+    public function describeForeignKeys(DatabaseConnection $connection, string $qualifiedTable): array
+    {
+        [$schema, $table] = $this->parseQualifiedTableIdentifier($qualifiedTable);
+        $connectionName = $this->connectionService->registerRuntimeConnection($connection);
+
+        if ($connection->driver === 'pgsql') {
+            $query = DB::connection($connectionName)
+                ->table('information_schema.table_constraints as tc')
+                ->selectRaw('kcu.column_name as column_name, ccu.table_name as referenced_table_name, ccu.column_name as referenced_column_name')
+                ->join('information_schema.key_column_usage as kcu', fn ($join) => $join->on('tc.constraint_schema', '=', 'kcu.constraint_schema')->on('tc.constraint_name', '=', 'kcu.constraint_name'))
+                ->join('information_schema.referential_constraints as rc', fn ($join) => $join->on('tc.constraint_schema', '=', 'rc.constraint_schema')->on('tc.constraint_name', '=', 'rc.constraint_name'))
+                ->join('information_schema.constraint_column_usage as ccu', fn ($join) => $join->on('rc.unique_constraint_schema', '=', 'ccu.constraint_schema')->on('rc.unique_constraint_name', '=', 'ccu.constraint_name'))
+                ->where('tc.table_name', $table)
+                ->where('tc.constraint_type', 'FOREIGN KEY')
+                ->orderBy('kcu.ordinal_position');
+
+            if ($schema !== null) {
+                $query->where('tc.table_schema', $schema);
+            }
+
+            $rows = $query->get();
+        } else {
+            $query = DB::connection($connectionName)
+                ->table('information_schema.key_column_usage as kcu')
+                ->selectRaw('kcu.column_name, kcu.referenced_table_name, kcu.referenced_column_name')
+                ->whereRaw('kcu.table_schema = database()')
+                ->where('kcu.table_name', $table)
+                ->whereNotNull('kcu.referenced_table_name')
+                ->orderBy('kcu.ordinal_position');
+
+            $rows = $query->get();
+        }
+
+        DB::purge($connectionName);
+
+        return collect($rows)
+            ->map(fn (object $row): array => [
+                'column' => (string) $row->column_name,
+                'referenced_table' => (string) $row->referenced_table_name,
+                'referenced_column' => (string) $row->referenced_column_name,
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
      * @return array<int, array<string, mixed>>
      */
     public function previewTable(DatabaseConnection $connection, string $qualifiedTable, int $limit): array

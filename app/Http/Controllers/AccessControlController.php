@@ -73,7 +73,9 @@ class AccessControlController extends Controller
 
         User::create($data);
 
-        return back()->with('toast', ['type' => 'success', 'message' => __('Usuario creado.')]);
+        return back()->with('flash', [
+            'toast' => ['type' => 'success', 'message' => __('Usuario creado.')],
+        ]);
     }
 
     public function updateUser(Request $request, User $user): RedirectResponse
@@ -90,14 +92,18 @@ class AccessControlController extends Controller
 
         $user->update($data);
 
-        return back()->with('toast', ['type' => 'success', 'message' => __('Usuario actualizado.')]);
+        return back()->with('flash', [
+            'toast' => ['type' => 'success', 'message' => __('Usuario actualizado.')],
+        ]);
     }
 
     public function destroyUser(User $user): RedirectResponse
     {
         $user->delete();
 
-        return back()->with('toast', ['type' => 'success', 'message' => __('Usuario eliminado.')]);
+        return back()->with('flash', [
+            'toast' => ['type' => 'success', 'message' => __('Usuario eliminado.')],
+        ]);
     }
 
     public function syncUserRoles(Request $request, User $user): RedirectResponse
@@ -109,7 +115,9 @@ class AccessControlController extends Controller
 
         $user->roles()->sync($data['role_ids'] ?? []);
 
-        return back()->with('toast', ['type' => 'success', 'message' => __('Roles actualizados.')]);
+        return back()->with('flash', [
+            'toast' => ['type' => 'success', 'message' => __('Roles actualizados.')],
+        ]);
     }
 
     public function storeRole(Request $request): RedirectResponse
@@ -121,7 +129,9 @@ class AccessControlController extends Controller
 
         Role::create($data);
 
-        return back()->with('toast', ['type' => 'success', 'message' => __('Rol creado.')]);
+        return back()->with('flash', [
+            'toast' => ['type' => 'success', 'message' => __('Rol creado.')],
+        ]);
     }
 
     public function updateRole(Request $request, Role $role): RedirectResponse
@@ -133,14 +143,18 @@ class AccessControlController extends Controller
 
         $role->update($data);
 
-        return back()->with('toast', ['type' => 'success', 'message' => __('Rol actualizado.')]);
+        return back()->with('flash', [
+            'toast' => ['type' => 'success', 'message' => __('Rol actualizado.')],
+        ]);
     }
 
     public function destroyRole(Role $role): RedirectResponse
     {
         $role->delete();
 
-        return back()->with('toast', ['type' => 'success', 'message' => __('Rol eliminado.')]);
+        return back()->with('flash', [
+            'toast' => ['type' => 'success', 'message' => __('Rol eliminado.')],
+        ]);
     }
 
     public function syncRolePermissions(Request $request, Role $role): RedirectResponse
@@ -152,6 +166,8 @@ class AccessControlController extends Controller
 
         $role->permissions()->sync($data['permission_ids'] ?? []);
 
-        return back()->with('toast', ['type' => 'success', 'message' => __('Permisos actualizados.')]);
+        return back()->with('flash', [
+            'toast' => ['type' => 'success', 'message' => __('Permisos actualizados.')],
+        ]);
     }
 }
