@@ -110,7 +110,7 @@ MonitorSQL resuelve esto con un gateway de solo lectura, control de acceso granu
 
 ```bash
 # 1. Clonar el repositorio
-git clone https://github.com/tu-usuario/monitorsql.git
+git clone https://github.com/ecr17dev/MonitorSQL.git
 cd monitorsql
 
 # 2. Instalar dependencias PHP
@@ -307,7 +307,7 @@ Las contribuciones son bienvenidas. Por favor:
 
 ## Autor
 
-Creado por [Tu Nombre](https://github.com/tu-usuario). MonitorSQL nació de la necesidad de dar acceso seguro a datos sin exponer la base de datos a modificaciones accidentales.
+Creado por [ecr17dev](https://github.com/ecr17dev). MonitorSQL nació de la necesidad de dar acceso seguro a datos sin exponer la base de datos a modificaciones accidentales.
 
 ---
 
