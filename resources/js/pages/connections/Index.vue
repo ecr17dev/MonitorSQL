@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { toastActionError, toastActionWarning } from '@/lib/actionToast';
 
 type Connection = {
     id: number;
@@ -111,18 +112,25 @@ function saveEdit(): void {
         onSuccess: () => {
             editingConnectionId.value = null;
         },
+        onError: (errors) => {
+            toastActionError(errors, 'No se pudo guardar la conexión.');
+        },
     });
 }
 
 function deleteConnection(connectionId: number): void {
-    const confirmed = window.confirm('Delete this connection?');
+    const confirmed = window.confirm('¿Eliminar esta conexión?');
 
     if (!confirmed) {
+        toastActionWarning('Eliminación cancelada.');
         return;
     }
 
     router.delete(`/connections/${connectionId}`, {
         preserveScroll: true,
+        onError: (errors) => {
+            toastActionError(errors, 'No se pudo eliminar la conexión.');
+        },
     });
 }
 
@@ -194,7 +202,13 @@ async function previewTable(connectionId: number, tableName: string): Promise<vo
                 <CardDescription>Store encrypted credentials and enforce read-only access policies.</CardDescription>
             </CardHeader>
             <CardContent>
-                <Form action="/connections" method="post" class="grid gap-3 md:grid-cols-3" v-slot="{ processing, errors }">
+                <Form
+                    action="/connections"
+                    method="post"
+                    class="grid gap-3 md:grid-cols-3"
+                    @error="(errors) => toastActionError(errors, 'No se pudo guardar la conexión.')"
+                    v-slot="{ processing, errors }"
+                >
                     <div class="space-y-2">
                         <Label for="name">Name</Label>
                         <Input id="name" name="name" required />
@@ -293,7 +307,7 @@ async function previewTable(connectionId: number, tableName: string): Promise<vo
                             >
                                 Explore tables
                             </Button>
-                            <Button size="sm" variant="destructive" @click="deleteConnection(connection.id)">Delete</Button>
+                            <Button size="sm" variant="destructive" @click="deleteConnection(connection.id)">Eliminar</Button>
                         </div>
 
                         <div v-if="(tableMap[connection.id] ?? []).length > 0" class="space-y-2 pt-2">
@@ -356,7 +370,7 @@ async function previewTable(connectionId: number, tableName: string): Promise<vo
                         <Input v-model.number="editForm.max_rows" type="number" placeholder="Max rows" />
                         <Input v-model.number="editForm.query_timeout_seconds" type="number" placeholder="Timeout" />
                         <div class="md:col-span-2 flex gap-2">
-                            <Button size="sm" @click="saveEdit">Save</Button>
+                            <Button size="sm" @click="saveEdit">Guardar</Button>
                             <Button size="sm" variant="secondary" @click="cancelEdit">Cancel</Button>
                         </div>
                     </div>

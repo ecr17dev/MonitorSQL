@@ -11,6 +11,11 @@ export function initializeFlashToast(): void {
             return;
         }
 
-        toast[data.type](data.message);
+        if (typeof toast[data.type] === 'function') {
+            toast[data.type](data.message);
+            return;
+        }
+
+        toast.message(data.message);
     });
 }

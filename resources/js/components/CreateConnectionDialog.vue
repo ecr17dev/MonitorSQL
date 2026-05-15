@@ -28,6 +28,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { Badge } from '@/components/ui/badge';
+import { toastActionError, toastActionSuccess } from '@/lib/actionToast';
 
 type Driver = 'pgsql' | 'mysql' | 'mariadb';
 
@@ -139,10 +140,12 @@ async function handleSave() {
 
         open.value = false;
         emit('created', createdConnectionId);
+        toastActionSuccess('Conexión creada.');
 
         router.reload({ only: ['connections'] });
     } catch (error) {
         serverError.value = error instanceof Error ? error.message : 'Error al crear la conexión.';
+        toastActionError(error, 'No se pudo guardar la conexión.');
     } finally {
         isSubmitting.value = false;
     }

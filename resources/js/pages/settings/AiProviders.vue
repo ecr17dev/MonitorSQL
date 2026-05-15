@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import Heading from '@/components/Heading.vue';
+import { toastActionError, toastActionSuccess } from '@/lib/actionToast';
 import { edit as editAiProviders } from '@/routes/ai-providers';
 
 type Provider = {
@@ -24,7 +25,9 @@ type TestState = {
 
 defineOptions({
     layout: {
-        breadcrumbs: [{ title: 'AI Providers', href: editAiProviders() }],
+        breadcrumbs: [
+            { title: 'Proveedores de IA', href: editAiProviders() },
+        ],
     },
 });
 
@@ -48,8 +51,9 @@ function getXsrfToken(): string {
 
 async function handleSave() {
     isSaving.value = true;
+
     try {
-        await fetch('/settings/ai-providers', {
+        const response = await fetch('/settings/ai-providers', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -60,7 +64,16 @@ async function handleSave() {
             credentials: 'same-origin',
             body: JSON.stringify({ providers: formData.value }),
         });
+
+        if (!response.ok) {
+            const body = await response.json().catch(() => ({}));
+            throw new Error(body.message || 'No se pudo guardar la configuración de proveedores IA.');
+        }
+
+        toastActionSuccess('Configuración de proveedores IA actualizada.');
         router.reload({ only: ['providers'] });
+    } catch (error) {
+        toastActionError(error, 'No se pudo guardar la configuración de proveedores IA.');
     } finally {
         isSaving.value = false;
     }
@@ -91,12 +104,12 @@ async function testProvider(providerKey: string) {
         const data = await response.json();
         state.result = {
             success: data.success ?? false,
-            message: data.message ?? 'Unknown response.',
+            message: data.message ?? 'Respuesta desconocida.',
         };
     } catch {
         state.result = {
             success: false,
-            message: 'Network error. Could not reach the test endpoint.',
+            message: 'Error de red. No se pudo alcanzar el endpoint de prueba.',
         };
     } finally {
         state.testing = false;
@@ -105,9 +118,13 @@ async function testProvider(providerKey: string) {
 </script>
 
 <template>
-    <Head title="AI Providers" />
+    <Head title="Proveedores de IA" />
     <div class="flex flex-col gap-6">
-        <Heading variant="small" title="AI Providers" description="Configure API keys for AI services. Save your key first, then test it." />
+        <Heading
+            variant="small"
+            title="Proveedores de IA"
+            description="Configura las API keys de los servicios de IA. Guarda primero tu clave y luego pruébala."
+        />
 
         <div class="flex flex-col gap-4">
             <div
@@ -144,7 +161,7 @@ async function testProvider(providerKey: string) {
                     >
                         <Loader2 v-if="testStates[provider.provider]?.testing" class="size-3 animate-spin" data-icon="inline-start" />
                         <Wifi v-else class="size-3" data-icon="inline-start" />
-                        {{ testStates[provider.provider]?.testing ? 'Testing...' : 'Test' }}
+                        {{ testStates[provider.provider]?.testing ? 'Probando...' : 'Probar' }}
                     </Button>
                 </div>
 
@@ -162,19 +179,19 @@ async function testProvider(providerKey: string) {
 
                 <div v-if="provider.is_enabled" class="mt-4 flex flex-col gap-3">
                     <div class="flex flex-col gap-1.5">
-                        <Label class="text-xs">API Key</Label>
+                        <Label class="text-xs">Clave API</Label>
                         <Input
                             v-model="formData[index].api_key"
                             type="password"
-                            :placeholder="provider.api_key ? '•••••••• (unchanged)' : 'sk-...'"
+                            :placeholder="provider.api_key ? '•••••••• (sin cambios)' : 'sk-...'"
                             class="h-8 text-xs"
                         />
                     </div>
                     <div class="flex flex-col gap-1.5">
-                        <Label class="text-xs">Default Model (optional)</Label>
+                        <Label class="text-xs">Modelo por defecto (opcional)</Label>
                         <Input
                             v-model="formData[index].default_model"
-                            placeholder="e.g. gpt-4.1-mini, claude-3-5-sonnet..."
+                            placeholder="ej. gpt-4.1-mini, claude-3-5-sonnet..."
                             class="h-8 text-xs"
                         />
                     </div>
@@ -184,10 +201,10 @@ async function testProvider(providerKey: string) {
 
         <div class="flex items-center gap-3">
             <Button :disabled="isSaving" @click="handleSave">
-                {{ isSaving ? 'Saving...' : 'Save AI Provider Configs' }}
+                {{ isSaving ? 'Guardando...' : 'Guardar configuración de proveedores IA' }}
             </Button>
             <p class="text-xs text-muted-foreground">
-                API keys are encrypted at rest. Save before testing.
+                Las claves API se cifran en reposo. Guarda antes de probar.
             </p>
         </div>
     </div>

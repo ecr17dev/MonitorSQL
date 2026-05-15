@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import CreateUserDialog from '@/components/CreateUserDialog.vue';
 import CreateRoleDialog from '@/components/CreateRoleDialog.vue';
+import { toastActionError, toastActionWarning } from '@/lib/actionToast';
 
 type RolePermission = { id: number; name: string; key: string };
 
@@ -47,13 +48,31 @@ const props = defineProps<{
 }>();
 
 function deleteUser(userId: number) {
-    if (!confirm('¿Eliminar este usuario?')) return;
-    router.delete(`/admin/users/${userId}`, { preserveScroll: true });
+    if (!confirm('¿Eliminar este usuario?')) {
+        toastActionWarning('Eliminación cancelada.');
+        return;
+    }
+
+    router.delete(`/admin/users/${userId}`, {
+        preserveScroll: true,
+        onError: (errors) => {
+            toastActionError(errors, 'No se pudo eliminar el usuario.');
+        },
+    });
 }
 
 function deleteRole(roleId: number) {
-    if (!confirm('¿Eliminar este rol?')) return;
-    router.delete(`/admin/roles/${roleId}`, { preserveScroll: true });
+    if (!confirm('¿Eliminar este rol?')) {
+        toastActionWarning('Eliminación cancelada.');
+        return;
+    }
+
+    router.delete(`/admin/roles/${roleId}`, {
+        preserveScroll: true,
+        onError: (errors) => {
+            toastActionError(errors, 'No se pudo eliminar el rol.');
+        },
+    });
 }
 </script>
 

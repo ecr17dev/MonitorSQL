@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { toastActionError, toastActionSuccess } from '@/lib/actionToast';
 
 type PermissionOption = {
     id: number;
@@ -110,7 +111,7 @@ async function handleSave() {
 
         const roleId = isEditing.value ? props.role!.id : await findNewRoleId();
         if (roleId) {
-            await fetch(`/admin/roles/${roleId}/permissions`, {
+            const permissionsResponse = await fetch(`/admin/roles/${roleId}/permissions`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -121,12 +122,19 @@ async function handleSave() {
                 credentials: 'same-origin',
                 body: JSON.stringify({ permission_ids: selectedPermissionIds.value }),
             });
+
+            if (!permissionsResponse.ok) {
+                const body = await permissionsResponse.json().catch(() => ({}));
+                throw new Error(body.message || 'No se pudieron guardar los permisos del rol.');
+            }
         }
 
         open.value = false;
+        toastActionSuccess(isEditing.value ? 'Rol actualizado.' : 'Rol creado.');
         router.reload({ only: ['roles', 'permissions'] });
     } catch (error) {
         serverError.value = error instanceof Error ? error.message : 'Error al guardar.';
+        toastActionError(error, 'No se pudo guardar el rol.');
     } finally {
         isSubmitting.value = false;
     }

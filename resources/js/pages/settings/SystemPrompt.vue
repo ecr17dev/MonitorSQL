@@ -6,11 +6,14 @@ import { RotateCcw } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import Heading from '@/components/Heading.vue';
+import { toastActionError, toastActionSuccess } from '@/lib/actionToast';
 import { edit as editSystemPrompt } from '@/routes/system-prompt';
 
 defineOptions({
     layout: {
-        breadcrumbs: [{ title: 'System Prompt', href: editSystemPrompt() }],
+        breadcrumbs: [
+            { title: 'Prompt del sistema', href: editSystemPrompt() },
+        ],
     },
 });
 
@@ -35,8 +38,9 @@ function getXsrfToken(): string {
 
 async function handleSave() {
     isSaving.value = true;
+
     try {
-        await fetch('/settings/system-prompt', {
+        const response = await fetch('/settings/system-prompt', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -47,7 +51,16 @@ async function handleSave() {
             credentials: 'same-origin',
             body: JSON.stringify({ content: content.value }),
         });
+
+        if (!response.ok) {
+            const body = await response.json().catch(() => ({}));
+            throw new Error(body.message || 'No se pudo guardar el prompt del sistema.');
+        }
+
+        toastActionSuccess('Prompt del sistema actualizado.');
         router.reload({ only: ['prompt'] });
+    } catch (error) {
+        toastActionError(error, 'No se pudo guardar el prompt del sistema.');
     } finally {
         isSaving.value = false;
     }
@@ -55,12 +68,12 @@ async function handleSave() {
 </script>
 
 <template>
-    <Head title="System Prompt" />
+    <Head title="Prompt del sistema" />
     <div class="flex flex-col gap-6">
         <Heading
             variant="small"
-            title="System Prompt"
-            description="Base instructions for the AI that generates SQL queries. Customize how the AI behaves."
+            title="Prompt del sistema"
+            description="Instrucciones base para la IA que genera consultas SQL. Personaliza su comportamiento."
         />
 
         <div class="flex flex-col gap-3">
@@ -70,16 +83,16 @@ async function handleSave() {
             <Textarea
                 v-model="content"
                 class="min-h-64 font-mono text-xs"
-                placeholder="Enter system prompt instructions..."
+                placeholder="Ingresa instrucciones del prompt del sistema..."
             />
         </div>
 
         <div class="flex items-center gap-3">
             <Button :disabled="isSaving" @click="handleSave">
-                {{ isSaving ? 'Saving...' : 'Save System Prompt' }}
+                {{ isSaving ? 'Guardando...' : 'Guardar prompt del sistema' }}
             </Button>
             <p class="text-xs text-muted-foreground">
-                Changes take effect on the next AI query generation.
+                Los cambios se aplican en la próxima generación de consulta IA.
             </p>
         </div>
     </div>

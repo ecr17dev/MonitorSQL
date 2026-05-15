@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { Link, usePage } from '@inertiajs/vue3';
-import { Database, HardDrive, HardDriveDownload, History, MessageSquare, ShieldCheck, Users } from 'lucide-vue-next';
+import { Brain, Database, HardDrive, HardDriveDownload, History, MessageSquare, MessageCircle, Save, ShieldCheck, Users } from 'lucide-vue-next';
 import AppLogo from '@/components/AppLogo.vue';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
@@ -28,6 +28,7 @@ const canViewAudit = computed<boolean>(() => permissions.value.includes('audit.v
 const canRunQueries = computed<boolean>(() => permissions.value.includes('queries.execute'));
 const canExportQueries = computed<boolean>(() => permissions.value.includes('queries.export'));
 const canManagePlatform = computed<boolean>(() => permissions.value.includes('connections.create'));
+const canUseAi = computed<boolean>(() => permissions.value.includes('queries.ai_generate'));
 
 const mainNavItems = computed<NavItem[]>(() => {
     const items: NavItem[] = [
@@ -49,15 +50,33 @@ const mainNavItems = computed<NavItem[]>(() => {
     if (canRunQueries.value) {
         items.push({
             title: 'Historial de consultas',
-            href: '/dashboard#query-history',
+            href: '/queries/history',
             icon: History,
+        });
+        items.push({
+            title: 'Consultas guardadas',
+            href: '/queries/saved',
+            icon: Save,
+        });
+    }
+
+    if (canUseAi.value) {
+        items.push({
+            title: 'Conversaciones IA',
+            href: '/conversations',
+            icon: MessageCircle,
+        });
+        items.push({
+            title: 'Memoria IA',
+            href: '/ai-memory',
+            icon: Brain,
         });
     }
 
     if (canViewAudit.value) {
         items.push({
             title: 'Auditoría',
-            href: '/dashboard#audit',
+            href: '/audit',
             icon: ShieldCheck,
         });
     }

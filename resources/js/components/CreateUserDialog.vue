@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { toastActionError, toastActionSuccess } from '@/lib/actionToast';
 
 type RoleOption = {
     id: number;
@@ -107,7 +108,7 @@ async function handleSave() {
         if (selectedRoleIds.value.length > 0 || isEditing.value) {
             const userId = isEditing.value ? props.user!.id : await findNewUserId();
             if (userId) {
-                await fetch(`/admin/users/${userId}/roles`, {
+                const rolesResponse = await fetch(`/admin/users/${userId}/roles`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -118,13 +119,20 @@ async function handleSave() {
                     credentials: 'same-origin',
                     body: JSON.stringify({ role_ids: selectedRoleIds.value }),
                 });
+
+                if (!rolesResponse.ok) {
+                    const body = await rolesResponse.json().catch(() => ({}));
+                    throw new Error(body.message || 'No se pudieron guardar los roles del usuario.');
+                }
             }
         }
 
         open.value = false;
+        toastActionSuccess(isEditing.value ? 'Usuario actualizado.' : 'Usuario creado.');
         router.reload({ only: ['users'] });
     } catch (error) {
         serverError.value = error instanceof Error ? error.message : 'Error al guardar.';
+        toastActionError(error, 'No se pudo guardar el usuario.');
     } finally {
         isSubmitting.value = false;
     }
