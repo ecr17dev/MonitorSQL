@@ -73,7 +73,8 @@ class ProfileUpdateTest extends TestCase
 
         $response
             ->assertSessionHasNoErrors()
-            ->assertRedirect(route('home'));
+            ->assertRedirect(route('home'))
+            ->assertSessionHas('flash.toast.type', 'success');
 
         $this->assertGuest();
         $this->assertNull($user->fresh());

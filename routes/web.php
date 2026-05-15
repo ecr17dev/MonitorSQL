@@ -1,13 +1,17 @@
 <?php
 
 use App\Http\Controllers\AccessControlController;
+use App\Http\Controllers\AiMemoryController;
 use App\Http\Controllers\AuditController;
 use App\Http\Controllers\BackupController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\ConnectionController;
+use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\ExportController;
 use App\Http\Controllers\ExportQueueController;
 use App\Http\Controllers\QueryController;
+use App\Http\Controllers\QueryHistoryController;
+use App\Http\Controllers\SavedQueryController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
@@ -64,12 +68,58 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('queries/ai-generate', [QueryController::class, 'aiGenerate'])
         ->middleware(['monitor.permission:queries.ai_generate', 'throttle:monitor-sql-ai-generate'])
         ->name('queries.ai-generate');
-    Route::get('queries/history', [QueryController::class, 'history'])
-        ->middleware('monitor.permission:queries.execute')
-        ->name('queries.history');
     Route::post('queries/save', [QueryController::class, 'save'])
         ->middleware('monitor.permission:queries.execute')
         ->name('queries.save');
+
+    Route::get('queries/history', [QueryHistoryController::class, 'index'])
+        ->middleware('monitor.permission:queries.execute')
+        ->name('queries.history.index');
+    Route::get('queries/history/{id}', [QueryHistoryController::class, 'show'])
+        ->middleware('monitor.permission:queries.execute')
+        ->name('queries.history.show');
+    Route::put('queries/history/{id}', [QueryHistoryController::class, 'update'])
+        ->middleware('monitor.permission:queries.execute')
+        ->name('queries.history.update');
+    Route::delete('queries/history/{id}', [QueryHistoryController::class, 'destroy'])
+        ->middleware('monitor.permission:queries.execute')
+        ->name('queries.history.destroy');
+
+    Route::get('queries/saved', [SavedQueryController::class, 'index'])
+        ->middleware('monitor.permission:queries.execute')
+        ->name('queries.saved.index');
+    Route::post('queries/saved', [SavedQueryController::class, 'store'])
+        ->middleware('monitor.permission:queries.execute')
+        ->name('queries.saved.store');
+    Route::put('queries/saved/{id}', [SavedQueryController::class, 'update'])
+        ->middleware('monitor.permission:queries.execute')
+        ->name('queries.saved.update');
+    Route::delete('queries/saved/{id}', [SavedQueryController::class, 'destroy'])
+        ->middleware('monitor.permission:queries.execute')
+        ->name('queries.saved.destroy');
+
+    Route::get('conversations', [ConversationController::class, 'index'])
+        ->middleware('monitor.permission:queries.ai_generate')
+        ->name('conversations.index');
+    Route::get('conversations/{id}', [ConversationController::class, 'show'])
+        ->middleware('monitor.permission:queries.ai_generate')
+        ->name('conversations.show');
+    Route::put('conversations/{id}', [ConversationController::class, 'update'])
+        ->middleware('monitor.permission:queries.ai_generate')
+        ->name('conversations.update');
+    Route::delete('conversations/{id}', [ConversationController::class, 'destroy'])
+        ->middleware('monitor.permission:queries.ai_generate')
+        ->name('conversations.destroy');
+
+    Route::get('ai-memory', [AiMemoryController::class, 'index'])
+        ->middleware('monitor.permission:queries.ai_generate')
+        ->name('ai-memory.index');
+    Route::delete('ai-memory/{id}', [AiMemoryController::class, 'destroy'])
+        ->middleware('monitor.permission:queries.ai_generate')
+        ->name('ai-memory.destroy');
+    Route::post('ai-memory/clear-all', [AiMemoryController::class, 'clearAll'])
+        ->middleware('monitor.permission:queries.ai_generate')
+        ->name('ai-memory.clear-all');
 
     Route::post('exports', [ExportController::class, 'store'])
         ->middleware('monitor.permission:queries.export')

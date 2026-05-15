@@ -38,7 +38,7 @@ class ProfileController extends Controller
 
         $request->user()->save();
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Profile updated.')]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Perfil actualizado correctamente.')]);
 
         return to_route('profile.edit');
     }
@@ -57,6 +57,11 @@ class ProfileController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return redirect('/');
+        return redirect('/')->with('flash', [
+            'toast' => [
+                'type' => 'success',
+                'message' => __('Cuenta eliminada correctamente.'),
+            ],
+        ]);
     }
 }

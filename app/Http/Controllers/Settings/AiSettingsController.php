@@ -70,7 +70,7 @@ class AiSettingsController extends Controller
         if (! $config || empty($config->api_key)) {
             return response()->json([
                 'success' => false,
-                'message' => 'No API key configured for this provider. Save a key first.',
+                'message' => 'No hay una clave API configurada para este proveedor. Guarda una clave primero.',
             ], 422);
         }
 
@@ -89,13 +89,13 @@ class AiSettingsController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => "Connected successfully in {$duration}ms using {$model}.",
+                'message' => "Conexión exitosa en {$duration}ms usando {$model}.",
                 'duration_ms' => $duration,
             ]);
         } catch (Throwable $throwable) {
             return response()->json([
                 'success' => false,
-                'message' => 'Connection failed: '.$throwable->getMessage(),
+                'message' => 'Conexión fallida: '.$throwable->getMessage(),
             ]);
         }
     }
@@ -141,7 +141,9 @@ class AiSettingsController extends Controller
 
         Cache::forget('ai_provider_keys');
 
-        return back()->with('toast', ['type' => 'success', 'message' => __('AI provider configs updated.')]);
+        return back()->with('flash', [
+            'toast' => ['type' => 'success', 'message' => __('Configuración de proveedores IA actualizada.')],
+        ]);
     }
 
     public function editPrompt(): Response
@@ -152,7 +154,7 @@ class AiSettingsController extends Controller
             'prompt' => [
                 'key' => 'sql_assistant',
                 'content' => $prompt?->content ?? $this->defaultPrompt(),
-                'description' => 'This prompt instructs the AI on how to generate SQL. Variables: {question} = user question, {tables} = allowed tables.',
+                'description' => 'Este prompt le indica a la IA cómo generar SQL. Variables: {question} = pregunta del usuario, {tables} = tablas permitidas.',
             ],
         ]);
     }
@@ -167,13 +169,15 @@ class AiSettingsController extends Controller
             ['key' => 'sql_assistant'],
             [
                 'content' => $data['content'],
-                'description' => 'SQL query assistant base system prompt.',
+                'description' => 'Prompt base del sistema para el asistente de consultas SQL.',
             ],
         );
 
         Cache::forget('system_prompt.sql_assistant');
 
-        return back()->with('toast', ['type' => 'success', 'message' => __('System prompt updated.')]);
+        return back()->with('flash', [
+            'toast' => ['type' => 'success', 'message' => __('Prompt del sistema actualizado.')],
+        ]);
     }
 
     private function defaultPrompt(): string
@@ -186,6 +190,7 @@ Mandatory rules:
 - Never generate INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, CREATE, REPLACE, GRANT, REVOKE, EXEC, EXECUTE, CALL, MERGE, or UPSERT.
 - Use only tables and columns available in the provided schema context.
 - Never invent tables, columns, or joins.
+- When joining tables, use the "Foreign keys (to allowed tables)" section in the schema context to determine correct JOIN conditions.
 - If context is insufficient, return a safe fallback SQL that selects from one allowed table with LIMIT.
 - Add LIMIT to row-level queries.
 - Return only valid structured output and keep explanations concise.
